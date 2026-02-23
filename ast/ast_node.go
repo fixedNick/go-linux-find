@@ -1,11 +1,7 @@
 package ast
 
 import (
-	"fmt"
 	"main/stuff/find/core"
-	"path/filepath"
-	"regexp"
-	"strconv"
 )
 
 type AstNode interface {
@@ -50,44 +46,15 @@ func (n UnaryNode) Eval(event core.FileEvent) core.Decision {
 	panic("unexpected Operation in UnaryNode")
 }
 
-type PredicateNode struct {
-	Name  string
-	Value string
-}
-
 func (n PredicateNode) Eval(event core.FileEvent) core.Decision {
-	switch n.Name {
-	case "-name":
-		m, err := regexp.Match(n.Value, []byte(filepath.Base(event.Path())))
-		if err != nil {
-			panic(fmt.Sprintf("REGEX ERR: %v", err))
-		}
+
+	handler, ok := predicates[n.Name]
+	if !ok {
 		return core.Decision{
-			Match: m,
-		}
-	case "-depth":
-		d, err := strconv.Atoi(n.Value)
-		if err != nil {
-			panic("depth must be INT")
-		}
-		return core.Decision{
-			Match: d == event.Depth(),
-		}
-	case "-type":
-		switch n.Value {
-		case "f":
-			return core.Decision{
-				Match: event.FileType().IsRegular(),
-			}
-		case "d":
-			return core.Decision{
-				Match: event.FileType().IsDir(),
-			}
-		default:
-			panic("unsupported file type")
+			Match: false,
 		}
 	}
 	return core.Decision{
-		Match: true,
+		Match: handler(n.Value, event),
 	}
 }

@@ -1,9 +1,5 @@
 package ast
 
-import (
-	"slices"
-)
-
 type Token struct {
 	TokenType
 	Lexeme string
@@ -80,8 +76,7 @@ func (t Tokenizer) isLogical(p string) (TokenType, bool) {
 	return logical, ok
 }
 
-var predicates = []string{"-name", "-depth", "-type"}
-
 func (t Tokenizer) isPredicate(p string) bool {
-	return slices.Contains(predicates, p)
+	_, ok := predicates[p]
+	return ok
 }

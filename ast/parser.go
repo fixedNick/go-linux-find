@@ -104,9 +104,26 @@ func (p *Parser) parsePredicate() AstNode {
 	if err != nil {
 		panic(err)
 	}
+
+	predType, ok := expectTypes[pred.Lexeme]
+	if !ok {
+		// todo: return ParseErr
+		panic("received pred not in expected preds")
+	}
+
+	parsedValue, err := predType.ParseValue(val.Value)
+	if err != nil {
+		// todo: return ParseErr
+		panic(err)
+	}
+
 	return PredicateNode{
-		Name:  pred.Lexeme,
-		Value: val.Value,
+		Name: pred.Lexeme,
+		Value: Value{
+			Raw:    val.Value,
+			Type:   predType,
+			Parsed: parsedValue,
+		},
 	}
 }
 
