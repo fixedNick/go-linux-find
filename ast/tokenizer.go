@@ -1,5 +1,7 @@
 package ast
 
+import "fmt"
+
 type Token struct {
 	TokenType
 	Lexeme string
@@ -17,6 +19,23 @@ const (
 	TOKEN_RPAREN      TokenType = 6
 	TOKEN_PREDICATE   TokenType = 7
 )
+
+var tokenNames = map[TokenType]string{
+	TOKEN_VALUE:       "TOKEN_VALUE",
+	TOKEN_LOGICAL_AND: "TOKEN_LOGICAL_AND",
+	TOKEN_LOGICAL_OR:  "TOKEN_LOGICAL_OR",
+	TOKEN_LOGICAL_NOT: "TOKEN_LOGICAL_NOT",
+	TOKEN_LPAREN:      "TOKEN_LPAREN",
+	TOKEN_RPAREN:      "TOKEN_RPAREN",
+	TOKEN_PREDICATE:   "TOKEN_PREDICATE",
+}
+
+func (tt TokenType) String() string {
+	if name, ok := tokenNames[tt]; ok {
+		return name
+	}
+	return fmt.Sprintf("TokenType(%d)", int(tt))
+}
 
 type Tokenizer struct{}
 

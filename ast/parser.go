@@ -1,8 +1,14 @@
 package ast
 
+import (
+	"fmt"
+	"main/stuff/find/core/ferrors"
+)
+
 type TokenStreamer interface {
 	Peek() Token
 	Next() Token
+	Pos() int
 	Expect(TokenType) (Token, error)
 	EOF() bool
 }
@@ -17,18 +23,24 @@ func NewParser(stream TokenStreamer) *Parser {
 	}
 }
 
-func (p *Parser) Parse() AstNode {
+func (p *Parser) Parse() (AstNode, error) {
 	return p.parseExpression()
 }
-func (p *Parser) parseExpression() AstNode {
+func (p *Parser) parseExpression() (AstNode, error) {
 	return p.parseOr()
 }
-func (p *Parser) parseOr() AstNode {
+func (p *Parser) parseOr() (AstNode, error) {
 
-	left := p.parseAnd()
+	left, err := p.parseAnd()
+	if err != nil {
+		return nil, err
+	}
 	for !p.stream.EOF() && p.stream.Peek().TokenType == TOKEN_LOGICAL_OR {
 		p.stream.Next()
-		right := p.parseAnd()
+		right, err := p.parseAnd()
+		if err != nil {
+			return nil, err
+		}
 		left = BinaryNode{
 			Op:    TOKEN_LOGICAL_OR,
 			Left:  left,
@@ -36,20 +48,26 @@ func (p *Parser) parseOr() AstNode {
 		}
 	}
 
-	return left
+	return left, nil
 
 }
 
 // find . -type f -name g -o -type d -name b
 // and_expr    := unary_expr ( AND unary_expr | implicit_and )*
-func (p *Parser) parseAnd() AstNode {
-	left := p.parseUnary()
+func (p *Parser) parseAnd() (AstNode, error) {
+	left, err := p.parseUnary()
+	if err != nil {
+		return nil, err
+	}
 	for !p.stream.EOF() {
 		t := p.stream.Peek()
 
 		if t.TokenType == TOKEN_LOGICAL_AND {
 			p.stream.Next()
-			right := p.parseUnary()
+			right, err := p.parseUnary()
+			if err != nil {
+				return nil, err
+			}
 			left = BinaryNode{
 				Op:    TOKEN_LOGICAL_AND,
 				Left:  left,
@@ -59,7 +77,10 @@ func (p *Parser) parseAnd() AstNode {
 		}
 
 		if t.TokenType == TOKEN_PREDICATE || t.TokenType == TOKEN_LPAREN || t.TokenType == TOKEN_LOGICAL_NOT {
-			right := p.parseUnary()
+			right, err := p.parseUnary()
+			if err != nil {
+				return nil, err
+			}
 			left = BinaryNode{
 				Op:    TOKEN_LOGICAL_AND,
 				Left:  left,
@@ -70,24 +91,29 @@ func (p *Parser) parseAnd() AstNode {
 
 		break
 	}
-	return left
+	return left, nil
 }
 
 // unary_expr  := NOT unary_expr | primary
-func (p *Parser) parseUnary() AstNode {
+func (p *Parser) parseUnary() (AstNode, error) {
 	// possible: predicate, group, not
 	if p.stream.Peek().TokenType == TOKEN_LOGICAL_NOT {
 		p.stream.Next()
+		un, err := p.parseUnary()
+		if err != nil {
+			return nil, err
+		}
+
 		return UnaryNode{
 			Op:   TOKEN_LOGICAL_NOT,
-			Node: p.parseUnary(),
-		}
+			Node: un,
+		}, nil
 	}
 	return p.parsePrimary()
 }
 
 // primary     := predicate | group
-func (p *Parser) parsePrimary() AstNode {
+func (p *Parser) parsePrimary() (AstNode, error) {
 	if p.stream.Peek().TokenType == TOKEN_LPAREN {
 		return p.parseGroup()
 	}
@@ -95,42 +121,71 @@ func (p *Parser) parsePrimary() AstNode {
 }
 
 // predicate value
-func (p *Parser) parsePredicate() AstNode {
+func (p *Parser) parsePredicate() (AstNode, error) {
 	pred, err := p.stream.Expect(TOKEN_PREDICATE)
 	if err != nil {
-		panic(err)
+		return nil, ferrors.ParseError{
+			Pos:     p.stream.Pos(),
+			Lexeme:  p.stream.Peek().Lexeme,
+			Message: err.Error(),
+		}
 	}
 	val, err := p.stream.Expect(TOKEN_VALUE)
 	if err != nil {
-		panic(err)
+		return nil, ferrors.ParseError{
+			Pos:     p.stream.Pos(),
+			Lexeme:  p.stream.Peek().Lexeme,
+			Message: err.Error(),
+		}
 	}
 
 	predType, ok := expectTypes[pred.Lexeme]
 	if !ok {
-		// todo: return ParseErr
-		panic("received pred not in expected preds")
+		return nil, ferrors.ParseError{
+			Pos:     p.stream.Pos(),
+			Lexeme:  p.stream.Peek().Lexeme,
+			Message: fmt.Sprintf("unknown predicate type of lexeme: %s", pred.Lexeme),
+		}
 	}
 
-	parsedValue, err := predType.ParseValue(val.Value)
+	v, err := predType.ParseValue(val.Value)
 	if err != nil {
-		// todo: return ParseErr
-		panic(err)
+		return nil, ferrors.SemanticError{
+			Predicate: pred.Lexeme,
+			Value:     val.Lexeme,
+			Message:   err.Error(),
+		}
 	}
 
 	return PredicateNode{
-		Name: pred.Lexeme,
-		Value: Value{
-			Raw:    val.Value,
-			Type:   predType,
-			Parsed: parsedValue,
-		},
-	}
+		Name:  pred.Lexeme,
+		Value: v,
+	}, nil
 }
 
 // group       := '(' expression ')'
-func (p *Parser) parseGroup() AstNode {
-	p.stream.Expect(TOKEN_LPAREN)
-	node := p.parseExpression()
-	p.stream.Expect(TOKEN_RPAREN)
-	return node
+func (p *Parser) parseGroup() (AstNode, error) {
+	_, err := p.stream.Expect(TOKEN_LPAREN)
+	if err != nil {
+		return nil, ferrors.ParseError{
+			Pos:     p.stream.Pos(),
+			Lexeme:  p.stream.Peek().Lexeme,
+			Message: err.Error(),
+		}
+	}
+
+	node, err := p.parseExpression()
+	if err != nil {
+		return nil, err
+	}
+
+	_, err = p.stream.Expect(TOKEN_RPAREN)
+	if err != nil {
+		return nil, ferrors.ParseError{
+			Pos:     p.stream.Pos(),
+			Lexeme:  p.stream.Peek().Lexeme,
+			Message: err.Error(),
+		}
+	}
+	return node, nil
 }

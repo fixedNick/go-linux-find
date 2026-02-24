@@ -1,6 +1,8 @@
 package ast
 
-import "fmt"
+import (
+	"fmt"
+)
 
 type TokenStream struct {
 	buf []Token
@@ -22,7 +24,7 @@ func (ts *TokenStream) Expect(tt TokenType) (Token, error) {
 	if ts.Peek().TokenType == tt {
 		return ts.Next(), nil
 	}
-	return Token{}, fmt.Errorf("expected token type: %v. Given: %v", tt, ts.Peek().TokenType)
+	return Token{}, fmt.Errorf("expected tokenType: %s. Given: %s", tt.String(), ts.Peek().TokenType.String())
 }
 
 func (ts *TokenStream) Peek() Token {
@@ -37,4 +39,8 @@ func (ts *TokenStream) Next() Token {
 
 func (ts *TokenStream) EOF() bool {
 	return ts.pos >= len(ts.buf)
+}
+
+func (ts *TokenStream) Pos() int {
+	return ts.pos
 }

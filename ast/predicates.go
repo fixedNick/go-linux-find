@@ -30,26 +30,50 @@ const (
 	BoolType
 )
 
-func (vt ValueType) ParseValue(val string) (interface{}, error) {
-	if vt == StringType {
-		return val, nil
+func (vt ValueType) ParseValue(raw string) (Value, error) {
+
+	v := Value{
+		Type: vt,
+		Raw:  raw,
 	}
-	if vt == IntType {
-		return strconv.Atoi(val)
+
+	switch vt {
+	case StringType:
+		v.Str = &raw
+		return v, nil
+	case IntType:
+		i, err := strconv.Atoi(raw)
+		if err != nil {
+			return v, fmt.Errorf("invalid int value: %s", raw)
+		}
+		v.Int = &i
+		return v, nil
+	case RegexType:
+		r, err := regexp.Compile(raw)
+		if err != nil {
+			return v, fmt.Errorf("invalid regex: %s", raw)
+		}
+		v.Regex = r
+		return v, nil
+	case BoolType:
+		s, err := strconv.ParseBool(raw)
+		if err != nil {
+			return v, fmt.Errorf("invalid bool: %s", raw)
+		}
+		v.Bool = &s
+		return v, nil
 	}
-	if vt == RegexType {
-		return regexp.Compile(val)
-	}
-	if vt == BoolType {
-		return strconv.ParseBool(val)
-	}
-	return nil, fmt.Errorf("[ValueType.ParseValue] unexpected value type")
+
+	return v, fmt.Errorf("[ValueType.ParseValue] unknown ValueType")
 }
 
 type Value struct {
-	Type   ValueType
-	Raw    string
-	Parsed interface{}
+	Type  ValueType
+	Raw   string
+	Int   *int
+	Str   *string
+	Regex *regexp.Regexp
+	Bool  *bool
 }
 
 type PredicateNode struct {
@@ -58,10 +82,16 @@ type PredicateNode struct {
 }
 
 func namePredicate(value Value, event core.FileEvent) bool {
-	return value.Parsed.(*regexp.Regexp).Match([]byte(filepath.Base(event.Path())))
+	if value.Regex == nil {
+		return false
+	}
+	return value.Regex.Match([]byte(filepath.Base(event.Path())))
 }
 func depthPredicate(value Value, event core.FileEvent) bool {
-	return value.Parsed == event.Depth()
+	if value.Int == nil {
+		return false
+	}
+	return *value.Int == event.Depth()
 }
 
 type TypeHandler func(event core.FileEvent) bool
@@ -72,9 +102,12 @@ var typeHandlers = map[string]TypeHandler{
 }
 
 func typePredicate(value Value, event core.FileEvent) bool {
-	handler, ok := typeHandlers[value.Parsed.(string)]
+	if value.Str == nil {
+		return false
+	}
+	handler, ok := typeHandlers[*value.Str]
 	if !ok {
-		panic("unsupported type of file")
+		return false
 	}
 	return handler(event)
 }
