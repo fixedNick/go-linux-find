@@ -14,17 +14,24 @@ type TokenStreamer interface {
 }
 
 type Parser struct {
-	stream TokenStreamer
+	stream    TokenStreamer
+	validator *ASTValidator
 }
 
-func NewParser(stream TokenStreamer) *Parser {
+func NewParser(stream TokenStreamer, validator *ASTValidator) *Parser {
 	return &Parser{
 		stream: stream,
 	}
 }
 
-func (p *Parser) Parse() (AstNode, error) {
-	return p.parseExpression()
+func (p *Parser) Parse() (AstNode, []error) {
+	root, err := p.parseExpression()
+	if err != nil {
+		return nil, []error{err}
+	}
+
+	verr := p.validator.Validate(root)
+	return root, verr
 }
 func (p *Parser) parseExpression() (AstNode, error) {
 	return p.parseOr()
@@ -139,7 +146,7 @@ func (p *Parser) parsePredicate() (AstNode, error) {
 		}
 	}
 
-	predType, ok := expectTypes[pred.Lexeme]
+	predicate, ok := predicates[pred.Lexeme]
 	if !ok {
 		return nil, ferrors.ParseError{
 			Pos:     p.stream.Pos(),
@@ -148,12 +155,12 @@ func (p *Parser) parsePredicate() (AstNode, error) {
 		}
 	}
 
-	v, err := predType.ParseValue(val.Value)
-	if err != nil {
+	v, errs := predicate.ParseValue(val.Value)
+	if len(errs) > 0 {
 		return nil, ferrors.SemanticError{
 			Predicate: pred.Lexeme,
 			Value:     val.Lexeme,
-			Message:   err.Error(),
+			Message:   errs[len(errs)-1].Error(),
 		}
 	}
 

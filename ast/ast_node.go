@@ -47,14 +47,13 @@ func (n UnaryNode) Eval(event core.FileEvent) core.Decision {
 }
 
 func (n PredicateNode) Eval(event core.FileEvent) core.Decision {
-
-	handler, ok := predicates[n.Name]
+	p, ok := predicates[n.Name]
 	if !ok {
 		return core.Decision{
 			Match: false,
 		}
 	}
 	return core.Decision{
-		Match: handler(n.Value, event),
+		Match: p.Handler(n.Value, event),
 	}
 }
