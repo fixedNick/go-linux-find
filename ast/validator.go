@@ -1,8 +1,8 @@
 package ast
 
 import (
+	"find/core/ferrors"
 	"fmt"
-	"main/stuff/find/core/ferrors"
 )
 
 type ASTValidator struct{}

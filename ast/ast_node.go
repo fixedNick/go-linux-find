@@ -1,7 +1,7 @@
 package ast
 
 import (
-	"main/stuff/find/core"
+	"find/core"
 )
 
 type AstNode interface {

@@ -1,8 +1,8 @@
 package ast
 
 import (
+	"find/core"
 	"fmt"
-	"main/stuff/find/core"
 	"maps"
 	"path/filepath"
 	"regexp"
