@@ -1,6 +1,9 @@
 package ast
 
-import "fmt"
+import (
+	"find/core"
+	"fmt"
+)
 
 type Token struct {
 	TokenType
@@ -96,6 +99,6 @@ func (t Tokenizer) isLogical(p string) (TokenType, bool) {
 }
 
 func (t Tokenizer) isPredicate(p string) bool {
-	_, ok := predicates[p]
+	_, ok := core.Predicates[p]
 	return ok
 }

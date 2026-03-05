@@ -1,6 +1,7 @@
 package ast
 
 import (
+	"find/core"
 	"find/core/ferrors"
 	"fmt"
 )
@@ -146,7 +147,7 @@ func (p *Parser) parsePredicate() (AstNode, error) {
 		}
 	}
 
-	predicate, ok := predicates[pred.Lexeme]
+	predicate, ok := core.Predicates[pred.Lexeme]
 	if !ok {
 		return nil, ferrors.ParseError{
 			Pos:     p.stream.Pos(),
@@ -164,7 +165,7 @@ func (p *Parser) parsePredicate() (AstNode, error) {
 		}
 	}
 
-	return PredicateNode{
+	return core.PredicateNode{
 		Name:  pred.Lexeme,
 		Value: v,
 	}, nil

@@ -1,6 +1,7 @@
 package ast
 
 import (
+	"find/core"
 	"find/core/ferrors"
 	"fmt"
 )
@@ -9,7 +10,7 @@ type ASTValidator struct{}
 
 func (v *ASTValidator) Validate(root AstNode) []error {
 	astErrors := []error{}
-	predNodes := []PredicateNode{}
+	predNodes := []core.PredicateNode{}
 
 	// tree validator
 	v.walk(root, &predNodes, &astErrors)
@@ -20,7 +21,7 @@ func (v *ASTValidator) Validate(root AstNode) []error {
 	return astErrors
 }
 
-func (v *ASTValidator) walk(root AstNode, predNodes *[]PredicateNode, astErrors *[]error) {
+func (v *ASTValidator) walk(root AstNode, predNodes *[]core.PredicateNode, astErrors *[]error) {
 	switch r := root.(type) {
 	case BinaryNode:
 		if r.Left == nil {
@@ -40,13 +41,13 @@ func (v *ASTValidator) walk(root AstNode, predNodes *[]PredicateNode, astErrors 
 			return
 		}
 		v.walk(r.Node, predNodes, astErrors)
-	case PredicateNode:
+	case core.PredicateNode:
 		v.validatePredicate(r, predNodes, astErrors)
 	}
 }
 
-func (v *ASTValidator) validatePredicate(p PredicateNode, predNodes *[]PredicateNode, astErrors *[]error) {
-	predicate, ok := predicates[p.Name]
+func (v *ASTValidator) validatePredicate(p core.PredicateNode, predNodes *[]core.PredicateNode, astErrors *[]error) {
+	predicate, ok := core.Predicates[p.Name]
 	if !ok {
 		*astErrors = append(*astErrors, ferrors.SemanticError{
 			Predicate: p.Name,
@@ -65,6 +66,6 @@ func (v *ASTValidator) validatePredicate(p PredicateNode, predNodes *[]Predicate
 	*predNodes = append(*predNodes, p)
 }
 
-func (v *ASTValidator) conflicts(predNodes []PredicateNode, astErrors *[]error) {
+func (v *ASTValidator) conflicts(predNodes []core.PredicateNode, astErrors *[]error) {
 	// panic("not implemented")
 }
