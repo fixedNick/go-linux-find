@@ -79,6 +79,12 @@ var Predicates = PredicateList{
 		},
 		Kind: FilterPredicate,
 	},
+	"-delete": Predicate{
+		Name:   "-delete",
+		Kind:   ActionPredicate,
+		Action: DeleteAction{},
+	},
+	"-quit":     Predicate{},
 	"-iname":    Predicate{},
 	"-path":     Predicate{},
 	"-ipath":    Predicate{},
