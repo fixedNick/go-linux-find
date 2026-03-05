@@ -2,9 +2,9 @@ package evaluator
 
 import (
 	"context"
+	"find/ast"
+	"find/core"
 	"fmt"
-	"main/stuff/find/ast"
-	"main/stuff/find/core"
 )
 
 type Evaluator struct {

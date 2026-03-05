@@ -1,7 +1,6 @@
-package ast
+package core
 
 import (
-	"find/core"
 	"fmt"
 	"maps"
 	"path/filepath"
@@ -10,16 +9,27 @@ import (
 	"strings"
 )
 
+type PredicateKind int
+
+const (
+	FilterPredicate PredicateKind = iota
+	ActionPredicate
+	ControlPredicate
+)
+
 type Predicate struct {
 	Name         string
 	AllowedTypes []ValueType
-	Handler      func(v Value, event core.FileEvent) bool
+	Handler      func(v Value, event FileEvent) Decision
 	Validate     func(PredicateNode) error
+	Kind         PredicateKind
+	Action       Action
+	Control      ControlSignal
 }
 
 type PredicateList map[string]Predicate
 
-var predicates = PredicateList{
+var Predicates = PredicateList{
 	"-name": Predicate{
 		Name: "-name",
 		AllowedTypes: []ValueType{
@@ -32,6 +42,7 @@ var predicates = PredicateList{
 			}
 			return nil
 		},
+		Kind: FilterPredicate,
 	},
 	"-depth": Predicate{
 		Name: "-depth",
@@ -45,6 +56,7 @@ var predicates = PredicateList{
 			}
 			return nil
 		},
+		Kind: FilterPredicate,
 	},
 	"-type": Predicate{
 		Name: "-type",
@@ -65,6 +77,7 @@ var predicates = PredicateList{
 			}
 			return nil
 		},
+		Kind: FilterPredicate,
 	},
 	"-iname":    Predicate{},
 	"-path":     Predicate{},
@@ -151,33 +164,70 @@ type PredicateNode struct {
 	Value Value
 }
 
-func namePredicate(value Value, event core.FileEvent) bool {
+func namePredicate(value Value, event FileEvent) Decision {
 	if value.Regex == nil {
-		return false
+		return Decision{
+			Match: false,
+		}
 	}
-	return value.Regex.Match([]byte(filepath.Base(event.Path())))
+	return Decision{Match: value.Regex.Match([]byte(filepath.Base(event.Path())))}
 }
-func depthPredicate(value Value, event core.FileEvent) bool {
+func depthPredicate(value Value, event FileEvent) Decision {
 	if value.Int == nil {
-		return false
+		return Decision{Match: false}
 	}
-	return *value.Int == event.Depth()
+	return Decision{Match: *value.Int == event.Depth()}
 }
 
-type TypeHandler func(event core.FileEvent) bool
+type TypeHandler func(event FileEvent) bool
 
 var typeHandlers = map[string]TypeHandler{
-	"f": func(event core.FileEvent) bool { return event.FileType().IsRegular() },
-	"d": func(event core.FileEvent) bool { return event.FileType().IsDir() },
+	"f": func(event FileEvent) bool { return event.FileType().IsRegular() },
+	"d": func(event FileEvent) bool { return event.FileType().IsDir() },
 }
 
-func typePredicate(value Value, event core.FileEvent) bool {
+func typePredicate(value Value, event FileEvent) Decision {
 	if value.Str == nil {
-		return false
+		return Decision{
+			Match: true,
+		}
 	}
 	handler, ok := typeHandlers[*value.Str]
 	if !ok {
-		return false
+		return Decision{
+			Match: false,
+		}
 	}
-	return handler(event)
+	return Decision{
+		Match: handler(event),
+	}
+}
+
+func (n PredicateNode) Eval(event FileEvent) Decision {
+	p, ok := Predicates[n.Name]
+	if !ok {
+		return Decision{
+			Match: false,
+		}
+	}
+
+	switch p.Kind {
+	case FilterPredicate:
+		decision := p.Handler(n.Value, event)
+		return Decision{
+			Match: decision.Match,
+		}
+	case ActionPredicate:
+		return Decision{
+			Actions: []Action{
+				p.Action,
+			},
+		}
+	case ControlPredicate:
+		return Decision{
+			Control: p.Control,
+		}
+	}
+
+	return Decision{}
 }

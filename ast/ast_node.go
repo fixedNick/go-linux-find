@@ -1,7 +1,7 @@
 package ast
 
 import (
-	"main/stuff/find/core"
+	"find/core"
 )
 
 type AstNode interface {
@@ -15,18 +15,25 @@ type BinaryNode struct {
 }
 
 func (n BinaryNode) Eval(event core.FileEvent) core.Decision {
-	l := n.Left.Eval(event).Match
-	r := n.Right.Eval(event).Match
-
 	switch n.Op {
 	case TOKEN_LOGICAL_AND:
+		left := n.Left.Eval(event)
+		if !left.Match {
+			return left
+		}
+		right := n.Right.Eval(event)
 		return core.Decision{
-			Match: l && r,
+			Match:   left.Match && right.Match,
+			Actions: append(left.Actions, right.Actions...),
+			Control: core.MergeControl(left.Control, right.Control),
 		}
 	case TOKEN_LOGICAL_OR:
-		return core.Decision{
-			Match: l || r,
+		left := n.Left.Eval(event)
+		if left.Match {
+			return left
 		}
+		right := n.Right.Eval(event)
+		return right
 	}
 	panic("unexpected Operation in BinaryNode")
 }
@@ -39,21 +46,12 @@ type UnaryNode struct {
 func (n UnaryNode) Eval(event core.FileEvent) core.Decision {
 	switch n.Op {
 	case TOKEN_LOGICAL_NOT:
+		res := n.Node.Eval(event)
 		return core.Decision{
-			Match: !n.Node.Eval(event).Match,
+			Match:   !res.Match,
+			Actions: res.Actions,
+			Control: res.Control,
 		}
 	}
 	panic("unexpected Operation in UnaryNode")
-}
-
-func (n PredicateNode) Eval(event core.FileEvent) core.Decision {
-	p, ok := predicates[n.Name]
-	if !ok {
-		return core.Decision{
-			Match: false,
-		}
-	}
-	return core.Decision{
-		Match: p.Handler(n.Value, event),
-	}
 }

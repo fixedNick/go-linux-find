@@ -2,7 +2,7 @@ package traverser
 
 import (
 	"context"
-	"main/stuff/find/core"
+	"find/core"
 	"os"
 	"path/filepath"
 )
