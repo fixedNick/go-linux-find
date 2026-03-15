@@ -147,7 +147,7 @@ func (p *Parser) parsePredicate() (AstNode, error) {
 			Message: fmt.Sprintf("unknown predicate type of lexeme: %s", pred.Lexeme),
 		}
 	}
-	// TODO: ПРОВЕРИТЬ ПАРСИНГ NoValue.
+
 	if predicate.NoValue {
 		return core.PredicateNode{Name: pred.Lexeme, Value: core.Value{}}, nil
 	}

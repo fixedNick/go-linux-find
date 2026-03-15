@@ -129,7 +129,37 @@ var Predicates = PredicateList{
 		},
 		Kind: FilterPredicate,
 	},
-	"-iname": Predicate{},
+	"-iname": Predicate{
+		Name: "-iname",
+		AllowedTypes: []ValueType{
+			RegexType, StringType,
+		},
+		Handler: func(v Value, event FileEvent) Decision {
+			lPath := event.Path()
+			if v.Regex != nil {
+				lRaw := strings.ToLower(v.Raw)
+				lRegex := regexp.MustCompile(lRaw)
+				match := lRegex.Match([]byte(lPath))
+				if match {
+					return Decision{Match: match}
+				}
+			}
+
+			if v.Str != nil {
+				return Decision{
+					Match: lPath == strings.ToLower(*v.Str),
+				}
+			}
+			return Decision{Match: false}
+		},
+		Validate: func(p PredicateNode) error {
+			if p.Value.Regex == nil && p.Value.Str == nil {
+				return fmt.Errorf("%s node: regex is nil", p.Name)
+			}
+			return nil
+		},
+		Kind: FilterPredicate,
+	},
 	"-path":  Predicate{},
 	"-ipath": Predicate{},
 	"-size":  Predicate{},
