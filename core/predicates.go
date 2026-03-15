@@ -36,12 +36,13 @@ var Predicates = PredicateList{
 		AllowedTypes: []ValueType{
 			StringType,
 		},
-		Handler: func(v Value, event FileEvent) Decision { return nameHandler(v, event, false) },
+		Handler: func(v Value, event FileEvent) Decision { return pathHandler(v, event, true, true) },
 		Validate: func(p PredicateNode) error {
-			if p.Value.Regex == nil && p.Value.Str == nil {
-				return fmt.Errorf("%s node: regex is nil", p.Name)
+			if p.Value.Str == nil {
+				return fmt.Errorf("%s node: str is nil", p.Name)
 			}
-			return nil
+			_, err := filepath.Match(*p.Value.Str, "test")
+			return err
 		},
 		Kind: FilterPredicate,
 	},
@@ -50,10 +51,13 @@ var Predicates = PredicateList{
 		AllowedTypes: []ValueType{
 			IntType,
 		},
-		Handler: depthPredicate,
+		Handler: depthHandler,
 		Validate: func(p PredicateNode) error {
 			if p.Value.Int == nil {
 				return fmt.Errorf("%s node: int is nil", p.Name)
+			}
+			if *p.Value.Int < 0 {
+				return fmt.Errorf("%s node: cannot be negative, received: %d", p.Name, *p.Value.Int)
 			}
 			return nil
 		},
@@ -64,7 +68,7 @@ var Predicates = PredicateList{
 		AllowedTypes: []ValueType{
 			StringType,
 		},
-		Handler: typePredicate,
+		Handler: typeHandler,
 		Validate: func(p PredicateNode) error {
 			if _, ok := typeHandlers[p.Value.Raw]; !ok {
 				var sb strings.Builder
@@ -107,6 +111,10 @@ var Predicates = PredicateList{
 			if p.Value.Int == nil {
 				return fmt.Errorf("%s node: int is nil", p.Name)
 			}
+
+			if *p.Value.Int < 0 {
+				return fmt.Errorf("%s node: cannot be negative, received: %d", p.Name, *p.Value.Int)
+			}
 			return nil
 		},
 		Kind: FilterPredicate,
@@ -126,6 +134,9 @@ var Predicates = PredicateList{
 			if p.Value.Int == nil {
 				return fmt.Errorf("%s node: int is nil", p.Name)
 			}
+			if *p.Value.Int < 0 {
+				return fmt.Errorf("%s node: cannot be negative, received: %d", p.Name, *p.Value.Int)
+			}
 			return nil
 		},
 		Kind: FilterPredicate,
@@ -135,17 +146,50 @@ var Predicates = PredicateList{
 		AllowedTypes: []ValueType{
 			StringType,
 		},
-		Handler: func(v Value, event FileEvent) Decision { return nameHandler(v, event, true) },
+		Handler: func(v Value, event FileEvent) Decision { return pathHandler(v, event, false, true) },
 		Validate: func(p PredicateNode) error {
-			if p.Value.Regex == nil && p.Value.Str == nil {
-				return fmt.Errorf("%s node: regex is nil", p.Name)
+			if p.Value.Str == nil {
+				return fmt.Errorf("%s node: str is nil", p.Name)
 			}
-			return nil
+			_, err := filepath.Match(*p.Value.Str, "test")
+			return err
 		},
 		Kind: FilterPredicate,
 	},
-	"-path":  Predicate{},
-	"-ipath": Predicate{},
+	"-path": Predicate{
+		Name: "-path",
+		AllowedTypes: []ValueType{
+			StringType,
+		},
+		Handler: func(v Value, event FileEvent) Decision {
+			return pathHandler(v, event, true, false)
+		},
+		Validate: func(p PredicateNode) error {
+			if p.Value.Str == nil {
+				return fmt.Errorf("%s node: str is nil", p.Name)
+			}
+			_, err := filepath.Match(*p.Value.Str, "test")
+			return err
+		},
+		Kind: FilterPredicate,
+	},
+	"-ipath": Predicate{
+		Name: "-ipath",
+		AllowedTypes: []ValueType{
+			StringType,
+		},
+		Handler: func(v Value, event FileEvent) Decision {
+			return pathHandler(v, event, false, false)
+		},
+		Validate: func(p PredicateNode) error {
+			if p.Value.Str == nil {
+				return fmt.Errorf("%s node: str is nil", p.Name)
+			}
+			_, err := filepath.Match(*p.Value.Str, "test")
+			return err
+		},
+		Kind: FilterPredicate,
+	},
 	"-size":  Predicate{},
 	"-empty": Predicate{},
 	"-mtime": Predicate{},
@@ -227,7 +271,7 @@ type PredicateNode struct {
 	Value Value
 }
 
-func nameHandler(value Value, event FileEvent, case_sensetive bool) Decision {
+func pathHandler(value Value, event FileEvent, case_sensitive bool, name_only bool) Decision {
 	if value.Str == nil {
 		return Decision{Match: false}
 	}
@@ -235,22 +279,23 @@ func nameHandler(value Value, event FileEvent, case_sensetive bool) Decision {
 	eventPath := event.Path()
 	inputName := *value.Str
 
-	if case_sensetive {
+	if name_only {
+		eventPath = filepath.Base(eventPath)
+	}
+
+	if !case_sensitive {
 		eventPath = strings.ToLower(eventPath)
 		inputName = strings.ToLower(inputName)
 	}
 
 	ok, err := filepath.Match(inputName, eventPath)
 	if err != nil || !ok {
-		if filepath.Base(eventPath) == inputName {
-			return Decision{Match: true}
-		}
 		return Decision{Match: false}
 	}
 	return Decision{Match: true}
 }
 
-func depthPredicate(value Value, event FileEvent) Decision {
+func depthHandler(value Value, event FileEvent) Decision {
 	if value.Int == nil {
 		return Decision{Match: false}
 	}
@@ -264,7 +309,7 @@ var typeHandlers = map[string]TypeHandler{
 	"d": func(event FileEvent) bool { return event.FileType().IsDir() },
 }
 
-func typePredicate(value Value, event FileEvent) Decision {
+func typeHandler(value Value, event FileEvent) Decision {
 	if value.Str == nil {
 		return Decision{
 			Match: true,
