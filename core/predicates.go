@@ -3,6 +3,7 @@ package core
 import (
 	"fmt"
 	"maps"
+	"os"
 	"path/filepath"
 	"regexp"
 	"strconv"
@@ -190,8 +191,24 @@ var Predicates = PredicateList{
 		},
 		Kind: FilterPredicate,
 	},
-	"-size":  Predicate{},
-	"-empty": Predicate{},
+	"-size": Predicate{},
+	"-empty": Predicate{
+		Name: "-empty",
+		Handler: func(v Value, event FileEvent) Decision {
+			if event.IsDir() {
+				entry, err := os.ReadDir(event.Path())
+				if err != nil {
+					fmt.Println("err, ", err.Error())
+					return Decision{Match: false}
+				}
+				return Decision{Match: len(entry) == 0}
+			}
+
+			return Decision{Match: event.FileInfo().Size() == 0}
+		},
+		Kind:    FilterPredicate,
+		NoValue: true,
+	},
 	"-mtime": Predicate{},
 	"-atime": Predicate{},
 	"-ctime": Predicate{},
@@ -306,7 +323,7 @@ type TypeHandler func(event FileEvent) bool
 
 var typeHandlers = map[string]TypeHandler{
 	"f": func(event FileEvent) bool { return event.FileType().IsRegular() },
-	"d": func(event FileEvent) bool { return event.FileType().IsDir() },
+	"d": func(event FileEvent) bool { return event.IsDir() },
 }
 
 func typeHandler(value Value, event FileEvent) Decision {

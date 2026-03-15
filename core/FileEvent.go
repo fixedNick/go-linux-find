@@ -33,7 +33,8 @@ func NewFileEventError(path string, depth int, err error) FileEvent {
 func (f FileEvent) Path() string { return f.path }
 
 // Is file a directory
-func (f FileEvent) IsDir() bool { return f.fileInfo.IsDir() }
+func (f FileEvent) IsDir() bool           { return f.fileInfo.IsDir() }
+func (f FileEvent) FileInfo() os.FileInfo { return f.fileInfo }
 
 // Depth of the file
 func (f FileEvent) Depth() int { return f.depth }
