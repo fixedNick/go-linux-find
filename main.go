@@ -47,7 +47,7 @@ func main() {
 		for _, a := range root.Eval(event).Actions {
 			a.Execute(event)
 		}
-		fmt.Printf("[DIR: %v | DEPTH: %d] %s\n", event.FileInfo().IsDir(), event.Depth(), event.Path())
+		fmt.Printf("[DIR: %v | DEPTH: %d] %s\n", event.IsDir(), event.Depth(), event.Path())
 	}
 
 }

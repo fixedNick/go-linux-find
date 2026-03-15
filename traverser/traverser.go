@@ -69,7 +69,7 @@ func (t *Traverser) walk(dir string, events chan<- core.FileEvent, depth int) {
 	case core.ControlPrune:
 		return
 	case core.ControlQuit:
-		if event.FileInfo().IsDir() {
+		if event.IsDir() {
 			t.stop = true
 			return
 		}

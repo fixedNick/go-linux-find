@@ -3,6 +3,7 @@ package core
 import (
 	"fmt"
 	"maps"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -135,7 +136,7 @@ var Predicates = PredicateList{
 			RegexType, StringType,
 		},
 		Handler: func(v Value, event FileEvent) Decision {
-			lPath := event.Path()
+			lPath := strings.ToLower(filepath.Base(event.Path()))
 			if v.Regex != nil {
 				lRaw := strings.ToLower(v.Raw)
 				lRegex := regexp.MustCompile(lRaw)
@@ -201,6 +202,7 @@ func (p Predicate) ParseValue(raw string) (Value, []error) {
 			v.Int = &i
 			return v, nil
 		case RegexType:
+			raw = strings.ReplaceAll(raw, "/", "\\\\")
 			r, err := regexp.Compile(raw)
 			if err != nil {
 				errs = append(errs, fmt.Errorf("invalid regex: %s", raw))
@@ -243,7 +245,7 @@ type PredicateNode struct {
 
 func namePredicate(value Value, event FileEvent) Decision {
 	if value.Regex != nil {
-		match := value.Regex.Match([]byte(event.Path()))
+		match := value.Regex.Match([]byte(filepath.Base(event.Path())))
 		if match {
 			return Decision{Match: match}
 		}
