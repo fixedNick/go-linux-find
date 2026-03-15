@@ -12,8 +12,14 @@ type Action interface {
 type DeleteAction struct{}
 
 func (a DeleteAction) Execute(event FileEvent) {
-	err := os.Remove(event.Path())
+	var err error
+	if event.fileInfo.IsDir() {
+		err = os.RemoveAll(event.Path())
+	} else {
+		err = os.Remove(event.Path())
+	}
+
 	if err != nil {
-		fmt.Println("Error:", err.Error())
+		fmt.Println("Exec error:", err.Error())
 	}
 }
