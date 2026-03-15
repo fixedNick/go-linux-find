@@ -3,6 +3,7 @@ package core
 import (
 	"fmt"
 	"maps"
+	"os"
 	"path/filepath"
 	"regexp"
 	"strconv"
@@ -24,6 +25,7 @@ type Predicate struct {
 	Validate     func(PredicateNode) error
 	Kind         PredicateKind
 	Action       Action
+	NoValue      bool
 	Control      ControlSignal
 }
 
@@ -33,14 +35,15 @@ var Predicates = PredicateList{
 	"-name": Predicate{
 		Name: "-name",
 		AllowedTypes: []ValueType{
-			RegexType, StringType,
+			StringType,
 		},
-		Handler: namePredicate,
+		Handler: func(v Value, event FileEvent) Decision { return pathHandler(v, event, true, true) },
 		Validate: func(p PredicateNode) error {
-			if p.Value.Regex == nil && p.Value.Str == nil {
-				return fmt.Errorf("%s node: regex is nil", p.Name)
+			if p.Value.Str == nil {
+				return fmt.Errorf("%s node: str is nil", p.Name)
 			}
-			return nil
+			_, err := filepath.Match(*p.Value.Str, "test")
+			return err
 		},
 		Kind: FilterPredicate,
 	},
@@ -49,10 +52,13 @@ var Predicates = PredicateList{
 		AllowedTypes: []ValueType{
 			IntType,
 		},
-		Handler: depthPredicate,
+		Handler: depthHandler,
 		Validate: func(p PredicateNode) error {
 			if p.Value.Int == nil {
 				return fmt.Errorf("%s node: int is nil", p.Name)
+			}
+			if *p.Value.Int < 0 {
+				return fmt.Errorf("%s node: cannot be negative, received: %d", p.Name, *p.Value.Int)
 			}
 			return nil
 		},
@@ -63,7 +69,7 @@ var Predicates = PredicateList{
 		AllowedTypes: []ValueType{
 			StringType,
 		},
-		Handler: typePredicate,
+		Handler: typeHandler,
 		Validate: func(p PredicateNode) error {
 			if _, ok := typeHandlers[p.Value.Raw]; !ok {
 				var sb strings.Builder
@@ -80,24 +86,135 @@ var Predicates = PredicateList{
 		Kind: FilterPredicate,
 	},
 	"-delete": Predicate{
-		Name:   "-delete",
-		Kind:   ActionPredicate,
-		Action: DeleteAction{},
+		Name:    "-delete",
+		Kind:    ActionPredicate,
+		NoValue: true,
+		Action:  DeleteAction{},
 	},
-	"-quit":     Predicate{},
-	"-iname":    Predicate{},
-	"-path":     Predicate{},
-	"-ipath":    Predicate{},
-	"-size":     Predicate{},
-	"-empty":    Predicate{},
-	"-mindepth": Predicate{},
-	"-maxdepth": Predicate{},
-	"-mtime":    Predicate{},
-	"-atime":    Predicate{},
-	"-ctime":    Predicate{},
-	"-perm":     Predicate{},
-	"-user":     Predicate{},
-	"-group":    Predicate{},
+	"-quit": Predicate{
+		Name:    "-quit",
+		NoValue: true,
+		Kind:    ControlPredicate,
+		Control: ControlQuit,
+	},
+	"-mindepth": Predicate{
+		Name: "-mindepth",
+		AllowedTypes: []ValueType{
+			IntType,
+		},
+		Handler: func(v Value, event FileEvent) Decision {
+			if v.Int == nil {
+				return Decision{Match: false}
+			}
+			return Decision{Match: event.Depth() >= *v.Int}
+		},
+		Validate: func(p PredicateNode) error {
+			if p.Value.Int == nil {
+				return fmt.Errorf("%s node: int is nil", p.Name)
+			}
+
+			if *p.Value.Int < 0 {
+				return fmt.Errorf("%s node: cannot be negative, received: %d", p.Name, *p.Value.Int)
+			}
+			return nil
+		},
+		Kind: FilterPredicate,
+	},
+	"-maxdepth": Predicate{
+		Name: "-maxdepth",
+		AllowedTypes: []ValueType{
+			IntType,
+		},
+		Handler: func(v Value, event FileEvent) Decision {
+			if v.Int == nil {
+				return Decision{Match: false}
+			}
+			return Decision{Match: event.Depth() < *v.Int}
+		},
+		Validate: func(p PredicateNode) error {
+			if p.Value.Int == nil {
+				return fmt.Errorf("%s node: int is nil", p.Name)
+			}
+			if *p.Value.Int < 0 {
+				return fmt.Errorf("%s node: cannot be negative, received: %d", p.Name, *p.Value.Int)
+			}
+			return nil
+		},
+		Kind: FilterPredicate,
+	},
+	"-iname": Predicate{
+		Name: "-iname",
+		AllowedTypes: []ValueType{
+			StringType,
+		},
+		Handler: func(v Value, event FileEvent) Decision { return pathHandler(v, event, false, true) },
+		Validate: func(p PredicateNode) error {
+			if p.Value.Str == nil {
+				return fmt.Errorf("%s node: str is nil", p.Name)
+			}
+			_, err := filepath.Match(*p.Value.Str, "test")
+			return err
+		},
+		Kind: FilterPredicate,
+	},
+	"-path": Predicate{
+		Name: "-path",
+		AllowedTypes: []ValueType{
+			StringType,
+		},
+		Handler: func(v Value, event FileEvent) Decision {
+			return pathHandler(v, event, true, false)
+		},
+		Validate: func(p PredicateNode) error {
+			if p.Value.Str == nil {
+				return fmt.Errorf("%s node: str is nil", p.Name)
+			}
+			_, err := filepath.Match(*p.Value.Str, "test")
+			return err
+		},
+		Kind: FilterPredicate,
+	},
+	"-ipath": Predicate{
+		Name: "-ipath",
+		AllowedTypes: []ValueType{
+			StringType,
+		},
+		Handler: func(v Value, event FileEvent) Decision {
+			return pathHandler(v, event, false, false)
+		},
+		Validate: func(p PredicateNode) error {
+			if p.Value.Str == nil {
+				return fmt.Errorf("%s node: str is nil", p.Name)
+			}
+			_, err := filepath.Match(*p.Value.Str, "test")
+			return err
+		},
+		Kind: FilterPredicate,
+	},
+	"-size": Predicate{},
+	"-empty": Predicate{
+		Name: "-empty",
+		Handler: func(v Value, event FileEvent) Decision {
+			if event.IsDir() {
+				entry, err := os.ReadDir(event.Path())
+				if err != nil {
+					fmt.Println("err, ", err.Error())
+					return Decision{Match: false}
+				}
+				return Decision{Match: len(entry) == 0}
+			}
+
+			return Decision{Match: event.FileInfo().Size() == 0}
+		},
+		Kind:    FilterPredicate,
+		NoValue: true,
+	},
+	"-mtime": Predicate{},
+	"-atime": Predicate{},
+	"-ctime": Predicate{},
+	"-perm":  Predicate{},
+	"-user":  Predicate{},
+	"-group": Predicate{},
 }
 
 type ValueType int
@@ -112,7 +229,6 @@ const (
 func (p Predicate) ParseValue(raw string) (Value, []error) {
 
 	errs := []error{}
-
 	for _, aType := range p.AllowedTypes {
 
 		v := Value{
@@ -121,9 +237,6 @@ func (p Predicate) ParseValue(raw string) (Value, []error) {
 		}
 
 		switch aType {
-		case StringType:
-			v.Str = &raw
-			return v, nil
 		case IntType:
 			i, err := strconv.Atoi(raw)
 			if err != nil {
@@ -133,12 +246,17 @@ func (p Predicate) ParseValue(raw string) (Value, []error) {
 			v.Int = &i
 			return v, nil
 		case RegexType:
+			// TODO: Unix /, Windows: \ handler based on OS
 			r, err := regexp.Compile(raw)
 			if err != nil {
 				errs = append(errs, fmt.Errorf("invalid regex: %s", raw))
 				continue
 			}
 			v.Regex = r
+			return v, nil
+		case StringType:
+			// TODO: Unix /, Windows: \ handler based on OS
+			v.Str = &raw
 			return v, nil
 		case BoolType:
 			s, err := strconv.ParseBool(raw)
@@ -170,15 +288,31 @@ type PredicateNode struct {
 	Value Value
 }
 
-func namePredicate(value Value, event FileEvent) Decision {
-	if value.Regex == nil {
-		return Decision{
-			Match: false,
-		}
+func pathHandler(value Value, event FileEvent, case_sensitive bool, name_only bool) Decision {
+	if value.Str == nil {
+		return Decision{Match: false}
 	}
-	return Decision{Match: value.Regex.Match([]byte(filepath.Base(event.Path())))}
+
+	eventPath := event.Path()
+	inputName := *value.Str
+
+	if name_only {
+		eventPath = filepath.Base(eventPath)
+	}
+
+	if !case_sensitive {
+		eventPath = strings.ToLower(eventPath)
+		inputName = strings.ToLower(inputName)
+	}
+
+	ok, err := filepath.Match(inputName, eventPath)
+	if err != nil || !ok {
+		return Decision{Match: false}
+	}
+	return Decision{Match: true}
 }
-func depthPredicate(value Value, event FileEvent) Decision {
+
+func depthHandler(value Value, event FileEvent) Decision {
 	if value.Int == nil {
 		return Decision{Match: false}
 	}
@@ -189,10 +323,10 @@ type TypeHandler func(event FileEvent) bool
 
 var typeHandlers = map[string]TypeHandler{
 	"f": func(event FileEvent) bool { return event.FileType().IsRegular() },
-	"d": func(event FileEvent) bool { return event.FileType().IsDir() },
+	"d": func(event FileEvent) bool { return event.IsDir() },
 }
 
-func typePredicate(value Value, event FileEvent) Decision {
+func typeHandler(value Value, event FileEvent) Decision {
 	if value.Str == nil {
 		return Decision{
 			Match: true,
@@ -225,12 +359,14 @@ func (n PredicateNode) Eval(event FileEvent) Decision {
 		}
 	case ActionPredicate:
 		return Decision{
+			Match: true,
 			Actions: []Action{
 				p.Action,
 			},
 		}
 	case ControlPredicate:
 		return Decision{
+			Match:   true,
 			Control: p.Control,
 		}
 	}
