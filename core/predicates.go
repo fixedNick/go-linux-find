@@ -34,9 +34,9 @@ var Predicates = PredicateList{
 	"-name": Predicate{
 		Name: "-name",
 		AllowedTypes: []ValueType{
-			RegexType, StringType,
+			StringType,
 		},
-		Handler: namePredicate,
+		Handler: func(v Value, event FileEvent) Decision { return nameHandler(v, event, false) },
 		Validate: func(p PredicateNode) error {
 			if p.Value.Regex == nil && p.Value.Str == nil {
 				return fmt.Errorf("%s node: regex is nil", p.Name)
@@ -133,26 +133,9 @@ var Predicates = PredicateList{
 	"-iname": Predicate{
 		Name: "-iname",
 		AllowedTypes: []ValueType{
-			RegexType, StringType,
+			StringType,
 		},
-		Handler: func(v Value, event FileEvent) Decision {
-			lPath := strings.ToLower(filepath.Base(event.Path()))
-			if v.Regex != nil {
-				lRaw := strings.ToLower(v.Raw)
-				lRegex := regexp.MustCompile(lRaw)
-				match := lRegex.Match([]byte(lPath))
-				if match {
-					return Decision{Match: match}
-				}
-			}
-
-			if v.Str != nil {
-				return Decision{
-					Match: lPath == strings.ToLower(*v.Str),
-				}
-			}
-			return Decision{Match: false}
-		},
+		Handler: func(v Value, event FileEvent) Decision { return nameHandler(v, event, true) },
 		Validate: func(p PredicateNode) error {
 			if p.Value.Regex == nil && p.Value.Str == nil {
 				return fmt.Errorf("%s node: regex is nil", p.Name)
@@ -202,7 +185,7 @@ func (p Predicate) ParseValue(raw string) (Value, []error) {
 			v.Int = &i
 			return v, nil
 		case RegexType:
-			raw = strings.ReplaceAll(raw, "/", "\\\\")
+			// TODO: Unix /, Windows: \ handler based on OS
 			r, err := regexp.Compile(raw)
 			if err != nil {
 				errs = append(errs, fmt.Errorf("invalid regex: %s", raw))
@@ -211,6 +194,7 @@ func (p Predicate) ParseValue(raw string) (Value, []error) {
 			v.Regex = r
 			return v, nil
 		case StringType:
+			// TODO: Unix /, Windows: \ handler based on OS
 			v.Str = &raw
 			return v, nil
 		case BoolType:
@@ -243,21 +227,29 @@ type PredicateNode struct {
 	Value Value
 }
 
-func namePredicate(value Value, event FileEvent) Decision {
-	if value.Regex != nil {
-		match := value.Regex.Match([]byte(filepath.Base(event.Path())))
-		if match {
-			return Decision{Match: match}
-		}
+func nameHandler(value Value, event FileEvent, case_sensetive bool) Decision {
+	if value.Str == nil {
+		return Decision{Match: false}
 	}
 
-	if value.Str != nil {
-		return Decision{
-			Match: event.Path() == *value.Str,
-		}
+	eventPath := event.Path()
+	inputName := *value.Str
+
+	if case_sensetive {
+		eventPath = strings.ToLower(eventPath)
+		inputName = strings.ToLower(inputName)
 	}
-	return Decision{Match: false}
+
+	ok, err := filepath.Match(inputName, eventPath)
+	if err != nil || !ok {
+		if filepath.Base(eventPath) == inputName {
+			return Decision{Match: true}
+		}
+		return Decision{Match: false}
+	}
+	return Decision{Match: true}
 }
+
 func depthPredicate(value Value, event FileEvent) Decision {
 	if value.Int == nil {
 		return Decision{Match: false}
