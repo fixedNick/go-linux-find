@@ -3,7 +3,6 @@ package core
 import (
 	"fmt"
 	"maps"
-	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -24,6 +23,7 @@ type Predicate struct {
 	Validate     func(PredicateNode) error
 	Kind         PredicateKind
 	Action       Action
+	NoValue      bool
 	Control      ControlSignal
 }
 
@@ -80,24 +80,66 @@ var Predicates = PredicateList{
 		Kind: FilterPredicate,
 	},
 	"-delete": Predicate{
-		Name:   "-delete",
-		Kind:   ActionPredicate,
-		Action: DeleteAction{},
+		Name:    "-delete",
+		Kind:    ActionPredicate,
+		NoValue: true,
+		Action:  DeleteAction{},
 	},
-	"-quit":     Predicate{},
-	"-iname":    Predicate{},
-	"-path":     Predicate{},
-	"-ipath":    Predicate{},
-	"-size":     Predicate{},
-	"-empty":    Predicate{},
-	"-mindepth": Predicate{},
-	"-maxdepth": Predicate{},
-	"-mtime":    Predicate{},
-	"-atime":    Predicate{},
-	"-ctime":    Predicate{},
-	"-perm":     Predicate{},
-	"-user":     Predicate{},
-	"-group":    Predicate{},
+	"-quit": Predicate{
+		Name:    "-quit",
+		NoValue: true,
+		Kind:    ControlPredicate,
+		Control: ControlQuit,
+	},
+	"-mindepth": Predicate{
+		Name: "-mindepth",
+		AllowedTypes: []ValueType{
+			IntType,
+		},
+		Handler: func(v Value, event FileEvent) Decision {
+			if v.Int == nil {
+				return Decision{Match: false}
+			}
+			return Decision{Match: event.Depth() >= *v.Int}
+		},
+		Validate: func(p PredicateNode) error {
+			if p.Value.Int == nil {
+				return fmt.Errorf("%s node: int is nil", p.Name)
+			}
+			return nil
+		},
+		Kind: FilterPredicate,
+	},
+	"-maxdepth": Predicate{
+		Name: "-maxdepth",
+		AllowedTypes: []ValueType{
+			IntType,
+		},
+		Handler: func(v Value, event FileEvent) Decision {
+			if v.Int == nil {
+				return Decision{Match: false}
+			}
+			return Decision{Match: event.Depth() < *v.Int}
+		},
+		Validate: func(p PredicateNode) error {
+			if p.Value.Int == nil {
+				return fmt.Errorf("%s node: int is nil", p.Name)
+			}
+			return nil
+		},
+		Kind: FilterPredicate,
+	},
+	"-iname": Predicate{},
+	"-path":  Predicate{},
+	"-ipath": Predicate{},
+	"-size":  Predicate{},
+	"-empty": Predicate{},
+	"-mtime": Predicate{},
+	"-atime": Predicate{},
+	"-ctime": Predicate{},
+	"-perm":  Predicate{},
+	"-user":  Predicate{},
+	"-group": Predicate{},
 }
 
 type ValueType int
@@ -112,7 +154,6 @@ const (
 func (p Predicate) ParseValue(raw string) (Value, []error) {
 
 	errs := []error{}
-
 	for _, aType := range p.AllowedTypes {
 
 		v := Value{
@@ -121,9 +162,6 @@ func (p Predicate) ParseValue(raw string) (Value, []error) {
 		}
 
 		switch aType {
-		case StringType:
-			v.Str = &raw
-			return v, nil
 		case IntType:
 			i, err := strconv.Atoi(raw)
 			if err != nil {
@@ -139,6 +177,9 @@ func (p Predicate) ParseValue(raw string) (Value, []error) {
 				continue
 			}
 			v.Regex = r
+			return v, nil
+		case StringType:
+			v.Str = &raw
 			return v, nil
 		case BoolType:
 			s, err := strconv.ParseBool(raw)
@@ -171,12 +212,19 @@ type PredicateNode struct {
 }
 
 func namePredicate(value Value, event FileEvent) Decision {
-	if value.Regex == nil {
-		return Decision{
-			Match: false,
+	if value.Regex != nil {
+		match := value.Regex.Match([]byte(event.Path()))
+		if match {
+			return Decision{Match: match}
 		}
 	}
-	return Decision{Match: value.Regex.Match([]byte(filepath.Base(event.Path())))}
+
+	if value.Str != nil {
+		return Decision{
+			Match: event.Path() == *value.Str,
+		}
+	}
+	return Decision{Match: false}
 }
 func depthPredicate(value Value, event FileEvent) Decision {
 	if value.Int == nil {
@@ -225,12 +273,14 @@ func (n PredicateNode) Eval(event FileEvent) Decision {
 		}
 	case ActionPredicate:
 		return Decision{
+			Match: true,
 			Actions: []Action{
 				p.Action,
 			},
 		}
 	case ControlPredicate:
 		return Decision{
+			Match:   true,
 			Control: p.Control,
 		}
 	}
