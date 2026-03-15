@@ -57,9 +57,11 @@ func (v *ASTValidator) validatePredicate(p core.PredicateNode, predNodes *[]core
 		return
 	}
 
-	if err := predicate.Validate(p); err != nil {
-		*astErrors = append(*astErrors, err)
-		return
+	if predicate.Validate != nil {
+		if err := predicate.Validate(p); err != nil {
+			*astErrors = append(*astErrors, err)
+			return
+		}
 	}
 
 	// all good, predicate is active
