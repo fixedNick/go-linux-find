@@ -138,14 +138,6 @@ func (p *Parser) parsePredicate() (AstNode, error) {
 			Message: err.Error(),
 		}
 	}
-	val, err := p.stream.Expect(TOKEN_VALUE)
-	if err != nil {
-		return nil, ferrors.ParseError{
-			Pos:     p.stream.Pos(),
-			Lexeme:  p.stream.Peek().Lexeme,
-			Message: err.Error(),
-		}
-	}
 
 	predicate, ok := core.Predicates[pred.Lexeme]
 	if !ok {
@@ -153,6 +145,19 @@ func (p *Parser) parsePredicate() (AstNode, error) {
 			Pos:     p.stream.Pos(),
 			Lexeme:  p.stream.Peek().Lexeme,
 			Message: fmt.Sprintf("unknown predicate type of lexeme: %s", pred.Lexeme),
+		}
+	}
+	// TODO: ПРОВЕРИТЬ ПАРСИНГ NoValue.
+	if predicate.NoValue {
+		return core.PredicateNode{Name: pred.Lexeme, Value: core.Value{}}, nil
+	}
+
+	val, err := p.stream.Expect(TOKEN_VALUE)
+	if err != nil {
+		return nil, ferrors.ParseError{
+			Pos:     p.stream.Pos(),
+			Lexeme:  p.stream.Peek().Lexeme,
+			Message: err.Error(),
 		}
 	}
 
